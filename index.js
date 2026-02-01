@@ -46,9 +46,13 @@ app.post('/api/shorturl', function(req, res) {
 });
 
 app.get('/api/shorturl/:short_url', async (req, res) => {
-  const shortUrl = req.params.short_url;
-  const urlDoc =  await urls.findOne({ short_url: +shortUrl });
-  res.redirect(urlDoc.url);
+  const shortUrl = Number(req.params.short_url);
+  const urlDoc =  await urls.findOne({ short_url: shortUrl });
+  if (!urlDoc) {
+    return res.json({ error: 'invalid URL' });
+  } else {
+    res.redirect(urlDoc.url);
+  }
 });
 
 
