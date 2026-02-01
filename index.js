@@ -2,11 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const app = express();
-const { MongoClient} = require('mongodb');
+const { MongoClient } = require('mongodb');
 const urlparser = require('url');
 const dns = require('dns');
-const { url } = require('inspector');
 
+// 1. ELIMINA la línea de 'inspector'
 const client = new MongoClient(process.env.DB_URL);
 
 async function startServer() {
@@ -14,25 +14,28 @@ async function startServer() {
   const db = client.db('urlshortner');
   const urls = db.collection('urls');
 
-// Basic Configuration
   const port = process.env.PORT || 3000;
 
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
-
   app.use('/public', express.static(`${process.cwd()}/public`));
 
-  app.get('/', function(req, res) {
-    res.sendFile(process.cwd() + '/views/index.html');
-  });
+  app.get('/', (req, res) => res.sendFile(process.cwd() + '/views/index.html'));
 
-// Your first API endpoint
+  // POST: Crear URL corta
   app.post('/api/shorturl', (req, res) => {
-    const url = req.body.url;
-    const hostname = urlparser.parse(url).hostname;
-
-    if (!hostname) {
+    const originalUrl = req.body.url;
+    
+    // Usar el constructor URL para validar protocolo (REQUISITO PARA TEST 4)
+    let hostname;
+    try {
+      const parsedUrl = new URL(originalUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return res.json({ error: 'invalid url' });
+      }
+      hostname = parsedUrl.hostname;
+    } catch (err) {
       return res.json({ error: 'invalid url' });
     }
 
@@ -41,29 +44,31 @@ async function startServer() {
         return res.json({ error: 'invalid url' });
       }
 
+      // IMPORTANTE: Asegúrate de que el short_url sea consistente
       const count = await urls.countDocuments({});
-      const urlDoc = { url, short_url: count };
+      const urlDoc = { url: originalUrl, short_url: count };
 
       await urls.insertOne(urlDoc);
-
-      res.json({ original_url: url, short_url: count });
+      res.json({ original_url: originalUrl, short_url: count });
     });
   });
 
+  // GET: Redirección
   app.get('/api/shorturl/:short_url', async (req, res) => {
-    const shortUrl = Number(req.params.short_url);
-    const urlDoc =  await urls.findOne({ short_url: shortUrl });
+    const shortUrl = req.params.short_url;
+    
+    // Buscar en la DB convirtiendo a número
+    const urlDoc = await urls.findOne({ short_url: Number(shortUrl) });
+    
     if (!urlDoc) {
-      return res.json({ error: 'invalid URL' });
+      return res.json({ error: 'No short URL found for the given input' });
     } else {
-      res.redirect(urlDoc.url);
+      // Redirigir a la URL original guardada
+      return res.redirect(urlDoc.url);
     }
   });
 
-
-  app.listen(port, function() {
-    console.log(`Listening on port ${port}`);
-  });
+  app.listen(port, () => console.log(`Listening on port ${port}`));
 }
 
-startServer();
+startServer().catch(console.error);
