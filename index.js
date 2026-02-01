@@ -4,56 +4,51 @@ const cors = require('cors');
 const app = express();
 const dns = require('dns');
 const urlParser = require('url');
-const { url } = require('inspector');
 
-
-// Midelleware para leer los datos del POST
+// 1. Middleware para leer datos de POST (Debe ir arriba)
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json()); // Añadido por seguridad para otros tipos de peticiones
 
-//Nuestra base de datos en memoria
+// 2. Configuración de CORS y archivos estáticos
+app.use(cors());
+app.use('/public', express.static(`${process.cwd()}/public`));
+
+// 3. Base de datos en memoria
 let urls = [];
 let id = 1;
 
-// Basic Configuration
-const port = process.env.PORT || 3000;
-
-app.use(cors());
-
-app.use('/public', express.static(`${process.cwd()}/public`));
-
+// 4. Rutas de Página Principal
 app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
 });
 
-// Your first API endpoint
 app.get('/api/hello', function(req, res) {
   res.json({ greeting: 'hello API' });
 });
 
-app.listen(port, function() {
-  console.log(`Listening on port ${port}`);
-});
-
+// 5. POST: Crear URL corta
 app.post('/api/shorturl', (req, res) => {
   const originalUrl = req.body.url;
 
   try {
     const urlObject = new URL(originalUrl);
 
-    // Verificación de protocolo (Indispensable para el test)
+    // El test exige que sea http o https
     if (urlObject.protocol !== 'http:' && urlObject.protocol !== 'https:') {
       return res.json({ error: 'invalid url' });
     }
 
+    // dns.lookup solo acepta el hostname
     dns.lookup(urlObject.hostname, (err) => {
       if (err) {
         return res.json({ error: 'invalid url' });
       } else {
         const shortUrl = id++;
-        const newEntry = { original_url: originalUrl, short_url: shortUrl };
+        const newEntry = { 
+          original_url: originalUrl, 
+          short_url: shortUrl 
+        };
         urls.push(newEntry);
-        
-        console.log("Guardado:", newEntry); // Verificación en consola
         return res.json(newEntry);
       }
     });
@@ -62,16 +57,23 @@ app.post('/api/shorturl', (req, res) => {
   }
 });
 
-// GET: Redirigir
+// 6. GET: Redirección
 app.get('/api/shorturl/:short_url', (req, res) => {
-  const { short_url } = req.params;
+  const short_url = req.params.short_url;
   
-  // IMPORTANTE: El test envía el ID como string, hay que buscarlo como número
+  // Buscamos convirtiendo a número para evitar errores de tipo
   const foundUrl = urls.find(u => u.short_url === parseInt(short_url));
 
   if (foundUrl) {
     return res.redirect(foundUrl.original_url);
   } else {
+    // Si no existe, devolvemos error (opcional según el test)
     return res.json({ error: "No short URL found" });
   }
+});
+
+// 7. Listener (SIEMPRE AL FINAL)
+const port = process.env.PORT || 3000;
+app.listen(port, function() {
+  console.log(`Listening on port ${port}`);
 });
