@@ -34,28 +34,32 @@ app.listen(port, function() {
   console.log(`Listening on port ${port}`);
 });
 
-app.post('/api/shorturl', (req, res)  => {
+app.post('/api/shorturl', (req, res) => {
   const originalUrl = req.body.url;
 
-  // 1. Validad el formato de la URL
-  const urlObject = urlParser.parse(originalUrl);
+  try {
+    // Usamos el constructor URL de JS que es más robusto
+    const urlObject = new URL(originalUrl);
 
-  // DNS lookup require el hostname sin el protocolo (http:// o https://)
-  if (!urlObject.hostname) {
+    // Requisito 4: Debe ser http o https
+    if (urlObject.protocol !== 'http:' && urlObject.protocol !== 'https:') {
+      return res.json({ error: 'invalid url' });
+    }
+
+    // DNS lookup requiere solo el hostname
+    dns.lookup(urlObject.hostname, (err) => {
+      if (err) {
+        return res.json({ error: 'invalid url' });
+      } else {
+        const shortUrl = id++;
+        urls.push({ original_url: originalUrl, short_url: shortUrl });
+        return res.json({ original_url: originalUrl, short_url: shortUrl });
+      }
+    });
+  } catch (err) {
+    // Si el constructor URL falla, la URL es inválida
     return res.json({ error: 'invalid url' });
   }
-
-  dns.lookup(urlObject.hostname, (err) => {
-    if (err) {
-      res.json({ error: 'invalid url' });
-    } else {
-      // 2. Guardar y responder
-      const shortUrl = id++;
-      urls.push({ original_url: originalUrl, short_url: shortUrl });
-
-      res.json({ original_url: originalUrl, short_url: shortUrl });
-    }
-  });
 });
 
 app.get('/api/shorturl/:short_url', (req, res) => {
