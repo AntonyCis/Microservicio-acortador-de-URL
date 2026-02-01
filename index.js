@@ -1,80 +1,57 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const dns = require('dns');
-
 const app = express();
+const { MongoClient} = require('mongodb');
+const urlparser = require('url');
+const dns = require('dns');
+const { url } = require('inspector');
 
-// Middleware para POST
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
+const client = new MongoClient(process.env.DB_URL);
+const db = client.db('urlshortner');
+const urls = db.collection('urls');
 
-// CORS y archivos estáticos
+// Basic Configuration
+const port = process.env.PORT || 3000;
+
 app.use(cors());
-app.use('/public', express.static(process.cwd() + '/public'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Base de datos en memoria
-let urls = [];
-let id = 1;
+app.use('/public', express.static(`${process.cwd()}/public`));
 
-// Página principal
-app.get('/', (req, res) => {
+app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
 });
 
-app.get('/api/hello', (req, res) => {
-  res.json({ greeting: 'hello API' });
-});
-
-// Crear URL corta
-app.post('/api/shorturl', (req, res) => {
-  const originalUrl = req.body.url;
-
-  try {
-    const urlObject = new URL(originalUrl);
-
-    // Solo http o https
-    if (urlObject.protocol !== 'http:' && urlObject.protocol !== 'https:') {
-      return res.json({ error: 'invalid url' });
+// Your first API endpoint
+app.post('/api/shorturl', function(req, res) {
+  console.log(req.body);
+  const url = req.body.url;
+  const dnslookup = dns.lookup(urlparser.parse(url).hostname, async(err, address) => {
+    if (!address) {
+      res.json({ error: 'invalid url' });
+    } else {
+      const urlCount = await urls.countDocuments({});
+      const urlDoc = {
+        url,
+        short_url: urlCount
     }
 
-    dns.lookup(urlObject.hostname, (err) => {
-      if (err) {
-        return res.json({ error: 'invalid url' });
-      }
-
-      const shortUrl = id++;
-      const entry = {
-        original_url: originalUrl,
-        short_url: shortUrl
-      };
-
-      urls.push(entry);
-      res.json(entry);
-    });
-
-  } catch {
-    res.json({ error: 'invalid url' });
-  }
+    const result = await urls.insertOne(urlDoc);
+    console.log(result);
+    res.json({ original_url: url, short_url: urlCount });
+    }
+  });
 });
 
-// Redirección
-app.get('/api/shorturl/:short_url', (req, res) => {
-  const shortUrl = Number(req.params.short_url);
-  const found = urls.find(u => u.short_url === shortUrl);
-
-  if (found) {
-    res.redirect(301, found.original_url);
-  } else {
-    res.json({ error: 'No short URL found' });
-  }
+app.get('/api/shorturl/:short_url', async function(req, res) {
+  const shortUrl = req.params.short_url;
+  const urlDoc =  await urls.findOne({ short_url: +shortUrl });
+  res.redirect(urlDoc.url);
 });
 
-// Listener
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
+
+app.listen(port, function() {
   console.log(`Listening on port ${port}`);
 });
-
-// 🔑 OBLIGATORIO PARA FREECODECAMP
-module.exports = app;
