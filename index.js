@@ -60,11 +60,11 @@ app.post('/api/shorturl', (req, res) => {
 
 // Redirección
 app.get('/api/shorturl/:short_url', (req, res) => {
-  const shortUrl = parseInt(req.params.short_url);
+  const shortUrl = Number(req.params.short_url);
   const found = urls.find(u => u.short_url === shortUrl);
 
   if (found) {
-    res.redirect(found.original_url);
+    res.redirect(301, found.original_url);
   } else {
     res.json({ error: 'No short URL found' });
   }
