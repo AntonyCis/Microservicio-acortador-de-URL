@@ -38,37 +38,40 @@ app.post('/api/shorturl', (req, res) => {
   const originalUrl = req.body.url;
 
   try {
-    // Usamos el constructor URL de JS que es más robusto
     const urlObject = new URL(originalUrl);
 
-    // Requisito 4: Debe ser http o https
+    // Verificación de protocolo (Indispensable para el test)
     if (urlObject.protocol !== 'http:' && urlObject.protocol !== 'https:') {
       return res.json({ error: 'invalid url' });
     }
 
-    // DNS lookup requiere solo el hostname
     dns.lookup(urlObject.hostname, (err) => {
       if (err) {
         return res.json({ error: 'invalid url' });
       } else {
         const shortUrl = id++;
-        urls.push({ original_url: originalUrl, short_url: shortUrl });
-        return res.json({ original_url: originalUrl, short_url: shortUrl });
+        const newEntry = { original_url: originalUrl, short_url: shortUrl };
+        urls.push(newEntry);
+        
+        console.log("Guardado:", newEntry); // Verificación en consola
+        return res.json(newEntry);
       }
     });
   } catch (err) {
-    // Si el constructor URL falla, la URL es inválida
     return res.json({ error: 'invalid url' });
   }
 });
 
+// GET: Redirigir
 app.get('/api/shorturl/:short_url', (req, res) => {
-  const shortUrl = parseInt(req.params.short_url);
-  const foundUrl = urls.find(u => u.short_url === shortUrl);
+  const { short_url } = req.params;
+  
+  // IMPORTANTE: El test envía el ID como string, hay que buscarlo como número
+  const foundUrl = urls.find(u => u.short_url === parseInt(short_url));
 
   if (foundUrl) {
-    res.redirect(foundUrl.original_url);
+    return res.redirect(foundUrl.original_url);
   } else {
-    res.json({ error: 'No short URL found for the given input' });  
+    return res.json({ error: "No short URL found" });
   }
 });
