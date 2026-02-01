@@ -10,6 +10,7 @@ const { url } = require('inspector');
 const client = new MongoClient(process.env.DB_URL);
 
 async function startServer() {
+  await client.connect();
   const db = client.db('urlshortner');
   const urls = db.collection('urls');
 
@@ -27,23 +28,25 @@ async function startServer() {
   });
 
 // Your first API endpoint
-  app.post('/api/shorturl', function(req, res) {
-    console.log(req.body);
+  app.post('/api/shorturl', (req, res) => {
     const url = req.body.url;
-    const dnslookup = dns.lookup(urlparser.parse(url).hostname, async(err, address) => {
-      if (!address) {
-        res.json({ error: 'invalid url' });
-      } else {
-        const urlCount = await urls.countDocuments({});
-        const urlDoc = {
-          url,
-          short_url: urlCount
+    const hostname = urlparser.parse(url).hostname;
+
+    if (!hostname) {
+      return res.json({ error: 'invalid url' });
+    }
+
+    dns.lookup(hostname, async (err) => {
+      if (err) {
+        return res.json({ error: 'invalid url' });
       }
 
-      const result = await urls.insertOne(urlDoc);
-      console.log(result);
-      res.json({ original_url: url, short_url: urlCount });
-      }
+      const count = await urls.countDocuments({});
+      const urlDoc = { url, short_url: count };
+
+      await urls.insertOne(urlDoc);
+
+      res.json({ original_url: url, short_url: count });
     });
   });
 
