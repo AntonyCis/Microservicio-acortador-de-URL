@@ -2,16 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const app = express();
-const { MongoClient } = require('mongodb');
+const { MongoClient} = require('mongodb');
 const urlparser = require('url');
 const dns = require('dns');
+const { url } = require('inspector');
 
-// 1. Conexión a DB (Asegúrate que DB_URL en .env no tenga < >)
 const client = new MongoClient(process.env.DB_URL);
 const db = client.db('urlshortner');
 const urls = db.collection('urls');
 
-// Configuración
+// Basic Configuration
 const port = process.env.PORT || 3000;
 
 app.use(cors());
@@ -24,55 +24,33 @@ app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
 });
 
-// 2. POST: Crear URL corta
+// Your first API endpoint
 app.post('/api/shorturl', function(req, res) {
-  const originalUrl = req.body.url;
-  
-  // Validar si el hostname existe
-  const hostname = urlparser.parse(originalUrl).hostname;
-  
-  if (!hostname) {
-    return res.json({ error: 'invalid url' });
-  }
-
-  dns.lookup(hostname, async (err, address) => {
-    // Si DNS falla o la URL no tiene protocolo válido
-    if (!address || !/ ^https?:\/\//i.test(originalUrl)) {
-      return res.json({ error: 'invalid url' });
+  console.log(req.body);
+  const url = req.body.url;
+  const dnslookup = dns.lookup(urlparser.parse(url).hostname, async(err, address) => {
+    if (!address) {
+      res.json({ error: 'invalid url' });
     } else {
-      try {
-        const urlCount = await urls.countDocuments({});
-        const urlDoc = {
-          url: originalUrl,
-          short_url: urlCount
-        };
+      const urlCount = await urls.countDocuments({});
+      const urlDoc = {
+        url,
+        short_url: urlCount
+    }
 
-        await urls.insertOne(urlDoc);
-        res.json({ original_url: originalUrl, short_url: urlCount });
-      } catch (e) {
-        res.json({ error: 'server error' });
-      }
+    const result = await urls.insertOne(urlDoc);
+    console.log(result);
+    res.json({ original_url: url, short_url: urlCount });
     }
   });
 });
 
-// 3. GET: Redirigir
 app.get('/api/shorturl/:short_url', async (req, res) => {
   const shortUrl = req.params.short_url;
-  
-  try {
-    // Buscamos convirtiendo el parámetro a número (+shortUrl)
-    const urlDoc = await urls.findOne({ short_url: parseInt(shortUrl) });
-    
-    if (urlDoc) {
-      return res.redirect(urlDoc.url);
-    } else {
-      return res.json({ error: "No short URL found" });
-    }
-  } catch (e) {
-    res.json({ error: 'invalid parameter' });
-  }
+  const urlDoc =  await urls.findOne({ short_url: +shortUrl });
+  res.redirect(urlDoc.url);
 });
+
 
 app.listen(port, function() {
   console.log(`Listening on port ${port}`);
